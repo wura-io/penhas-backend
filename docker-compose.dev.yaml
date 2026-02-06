@@ -1,0 +1,70 @@
+services:
+    db:
+        image: postgis/postgis:13-3.1
+        platform: linux/amd64
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: touchbase_dev
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: trustable
+        ports:
+            - "127.0.0.1:5432:5432"
+        volumes:
+            - ./data/postgresql:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres -d touchbase_dev"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        networks:
+            - db_network
+
+    redis:
+        image: docker.io/bitnami/redis:latest
+        restart: unless-stopped
+        environment:
+            - ALLOW_EMPTY_PASSWORD=yes
+            - REDIS_PASSWORD=""
+        volumes:
+            - ${REDIS_STORAGE:-./data/redis}:/bitnami/redis/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        networks:
+            - cache
+
+    penhas_api:
+        image: ghcr.io/institutoazmina/penhas-backend:latest
+        platform: linux/amd64
+        restart: unless-stopped
+        ports:
+            - "127.0.0.1:8080:8080"
+        environment:
+            SHELL: "/bin/bash"
+            REDIS_SERVER: "redis:6379"
+            REDIS_NS: ""
+        volumes:
+            - ./api:/src
+            - ./data:/data
+            - ./dev/SHELL:/etc/container_environment/SHELL:ro
+        depends_on:
+            db:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - db_network
+            - cache
+        logging:
+            driver: "json-file"
+            options:
+                max-file: "10"
+                max-size: "1m"
+
+networks:
+    db_network:
+        driver: bridge
+    cache:
+        driver: bridge
