@@ -1,0 +1,43 @@
+{
+    "name": "penhas-contract-tests",
+    "version": "1.0.0",
+    "description": "Cucumber.js contract tests for Perl → Python migration (Golden Master)",
+    "scripts": {
+        "build": "tsc",
+        "test": "cucumber-js",
+        "test:perl": "TARGET=perl cucumber-js --tags '@perl'",
+        "test:python": "TARGET=python cucumber-js --tags '@python'",
+        "test:auth": "cucumber-js --tags '@auth'",
+        "test:timeline": "cucumber-js --tags '@timeline'",
+        "test:stable": "for i in {1..100}; do npm run test:perl || exit 1; done",
+        "test:watch": "nodemon --watch 'features/**/*.feature' --watch 'step-definitions/**/*.ts' --watch 'support/**/*.ts' --exec 'npm test'",
+        "report": "open reports/report.html"
+    },
+    "keywords": [
+        "cucumber",
+        "contract-tests",
+        "golden-master",
+        "characterization-testing"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@cucumber/cucumber": "^10.0.1",
+        "@faker-js/faker": "^8.4.1",
+        "@testcontainers/postgresql": "^10.0.0",
+        "@testcontainers/redis": "^10.0.0",
+        "axios": "^1.6.7",
+        "chai": "^4.3.10",
+        "pg": "^8.11.3",
+        "supertest": "^6.3.4"
+    },
+    "devDependencies": {
+        "@types/chai": "^4.3.11",
+        "@types/node": "^20.10.6",
+        "@types/pg": "^8.10.9",
+        "@types/supertest": "^6.0.2",
+        "nodemon": "^3.0.3",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3"
+    }
+}
