@@ -36,8 +36,11 @@ services:
             - cache
 
     penhas_api:
-        image: ghcr.io/institutoazmina/penhas-backend:latest
-        platform: linux/amd64
+        build:
+            context: ./api
+            dockerfile: ../dev/Dockerfile
+            platforms:
+                - linux/amd64
         restart: unless-stopped
         ports:
             - "127.0.0.1:8080:8080"

@@ -22,8 +22,8 @@ cd penhas-backend
 # 2. Criar diretorios de dados
 mkdir -p data/redis data/postgresql
 
-# 3. Subir o ambiente
-docker compose -f docker-compose.dev.yaml up -d
+# 3. Construir a imagem e subir o ambiente (primeiro build demora)
+docker compose -f docker-compose.dev.yaml up -d --build
 
 # 4. Acompanhar o startup (primeira vez instala dependencias Perl)
 docker compose -f docker-compose.dev.yaml logs -f penhas_api
@@ -46,7 +46,7 @@ Startups subsequentes sao mais rapidos porque as dependencias ficam em cache no 
 docker-compose.dev.yaml
 ├── db (postgis/postgis:13-3.1)          -> 127.0.0.1:5432
 ├── redis (bitnami/redis:latest)         -> interno (porta 6379)
-└── penhas_api (penhas-backend:latest)   -> 127.0.0.1:8080
+└── penhas_api (build: api/docker/)      -> 127.0.0.1:8080
     ├── volume: ./api -> /src
     ├── volume: ./data -> /data
     └── volume: ./dev/SHELL -> /etc/container_environment/SHELL
@@ -58,7 +58,7 @@ docker-compose.dev.yaml
 |---------|--------|--------|
 | **db** | `postgis/postgis:13-3.1` | PostgreSQL 13 com extensao PostGIS |
 | **redis** | `bitnami/redis:latest` | Cache e filas (sem senha) |
-| **penhas_api** | `ghcr.io/institutoazmina/penhas-backend:latest` | API Perl/Mojolicious + Minion workers |
+| **penhas_api** | Build local (`api/docker/Dockerfile`) | API Perl/Mojolicious + Minion workers |
 
 ### Como a Conectividade Funciona
 
@@ -137,6 +137,20 @@ docker compose -f docker-compose.dev.yaml exec -u app penhas_api /src/script/res
 docker compose -f docker-compose.dev.yaml down
 docker compose -f docker-compose.dev.yaml up -d
 ```
+
+### Hot Reload (apos editar codigo)
+
+O volume `./api:/src` monta o codigo local diretamente no container. Apos editar arquivos em `api/lib/`, aplique as mudancas com um reload graceful do Hypnotoad:
+
+```bash
+# Reload da API (zero-downtime, sem derrubar o container)
+docker compose -f docker-compose.dev.yaml exec -u app penhas_api /src/script/restart-services.sh api
+
+# Reload da API + Minion workers
+docker compose -f docker-compose.dev.yaml exec -u app penhas_api /src/script/restart-services.sh
+```
+
+O Hypnotoad faz hot deploy: inicia novos workers com o codigo atualizado e encerra os antigos graciosamente. Nao e necessario reiniciar o container.
 
 ### Banco de Dados
 
@@ -334,7 +348,8 @@ penhas-backend/
 | DB Host na API | `db` (Docker service name) | `172.17.0.1` (bridge gateway) |
 | API workers | 1 | Configuravel |
 | Directus | Nao incluido | Incluido |
-| Imagem API | `latest` | Tag fixa (commit SHA) |
+| Imagem API | Build local (`api/docker/Dockerfile`) | Tag fixa (commit SHA) |
+| Hot reload | Sim, via `restart-services.sh` | Nao |
 | Platform | `linux/amd64` explicito | Nativo do host |
 
 ## Admin
