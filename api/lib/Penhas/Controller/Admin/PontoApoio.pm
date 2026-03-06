@@ -251,9 +251,6 @@ sub apa_review {
         }
     }
 
-
-use DDP; p $fake_pa;
-
     return $c->respond_to_if_web(
         json => {
             json => {
@@ -439,7 +436,7 @@ sub try_publish_pa {
           if $valid->{$field} && $valid->{$field} !~ /^\d{2}\:\d{2}$/a;
     }
 
-    $c->schema->txn_do(
+    $c->schema2->txn_do(
         sub {
             $valid->{ja_passou_por_moderacao} = 1;
 
@@ -448,7 +445,40 @@ sub try_publish_pa {
             $valid->{updated_at} = \'now()';
             $valid->{cliente_id} = $row->get_column('cliente_id');
 
-            my $pa = $c->schema2->resultset('PontoApoio')->create($valid);
+            my $pa;
+            eval {
+                $pa = $c->schema2->resultset('PontoApoio')->create($valid);
+                1;
+            } or do {
+                my $err = $@;
+                if (
+                    ref $err eq 'DBIx::Class::Exception'
+                    && $err->{msg}
+                    && $err->{msg} =~ /duplicate key value violates unique constraint/i
+                    && $err->{msg} =~ /(?:idx_26383_primary|ponto_apoio_pkey|Key \(id\)=)/i
+                  )
+                {
+                    # Recover from out-of-sync sequence after manual imports/restores.
+                    $c->schema2->storage->dbh_do(
+                        sub {
+                            my ($storage, $dbh) = @_;
+                            $dbh->do(
+                                q{
+                                  SELECT setval(
+                                    'public.ponto_apoio_id_seq',
+                                    COALESCE((SELECT MAX(id) FROM public.ponto_apoio), 0) + 1,
+                                    false
+                                  )
+                                }
+                            );
+                        }
+                    );
+                    $pa = $c->schema2->resultset('PontoApoio')->create($valid);
+                }
+                else {
+                    die $err;
+                }
+            };
             $c->tick_ponto_apoio_index();
 
             $row->update(
@@ -460,7 +490,8 @@ sub try_publish_pa {
                             approved_by => $c->stash('admin_user')->id,
                         }
                     ),
-                    status => 'approved',
+                    created_ponto_apoio_id => $pa->id,
+                    status                 => 'approved',
                 }
             );
         }
