@@ -41,8 +41,13 @@ jobs:
 
             - name: Deploy
               env:
-                  DEPLOY_WEBHOOK: ${{ secrets.deploy_webhook }}
-                  DEPLOY_TOKEN: ${{ secrets.deploy_token }}
+                  DEPLOY_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK }}
+                  DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
               run: |
-                  curl --request GET "$DEPLOY_WEBHOOK" \
+                  if [ -z "$DEPLOY_WEBHOOK" ] || [ -z "$DEPLOY_TOKEN" ]; then
+                    echo "::error::DEPLOY_WEBHOOK or DEPLOY_TOKEN secret is not configured"
+                    exit 1
+                  fi
+                  curl --fail-with-body --show-error --silent \
+                    --request GET "$DEPLOY_WEBHOOK" \
                     --header "Authorization: Bearer $DEPLOY_TOKEN"
