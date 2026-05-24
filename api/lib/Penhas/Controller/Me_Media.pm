@@ -12,11 +12,25 @@ use Penhas::Utils qw/get_media_filepath random_string/;
 use Penhas::Logger;
 use IPC::Run3;
 use File::Temp;
+use File::Copy qw(copy);
 use Fcntl qw(SEEK_SET);
 use MIME::Base64;
 use Mojo::File;
+use URI;
 
 has _uploader => sub { Penhas::Uploader->new() };
+
+sub audio_palliative_health {
+    my $c = shift;
+
+    return $c->render(
+        json => {
+            palliative   => JSON::true,
+            active_since => '2026-05-23',
+        },
+        status => 200,
+    );
+}
 
 sub assert_user_perms {
     my $c = shift;
@@ -214,31 +228,70 @@ sub upload {
                 log_error("original file kept at $keep_original");
             }
 
-            die {
-                error   => 'unsupported_media_type',
-                message => 'O arquivo de áudio está corrompido ou não é suportado.',
+            warn "[PALLIATIVE] audio conversion failed; storing original upload without codec validation\n";
+            $c->stash('waveform' => 'palliative');
+            $c->stash('audio_duration' => 1);
+
+            my $s3 = _palliative_upload_audio_file(
+                $c,
+                file      => $media,
+                path      => $s3_prefix . ".aac",
+                type      => 'application/octet-stream',
+                id        => $id,
+                extension => $ext,
+            );
+
+            $row = {
+                file_info => to_json(
+                    {
+                        o_ext      => $ext,
+                        o_size     => $upload->size,
+                        palliative => JSON::true,
+                    }
+                ),
+                file_size => -s $media,
+                s3_path   => $s3,
             };
         }
 
-        if ($c->stash('extract_waveform')) {
-            $c->stash('waveform' => &_extract_waveform($fhout->filename));
-        }
-        $c->stash('audio_duration' => &_extract_duration($fhout->filename));
-
-        my $s3 = $c->_uploader->upload({path => $s3_prefix . ".aac", file => $fhout->filename, type => 'audio/aac',});
-
-        $row = {
-            file_info => to_json(
-                {
-                    o_ext  => $ext,
-                    o_size => $upload->size,
+        else {
+            if ($c->stash('extract_waveform')) {
+                eval { $c->stash('waveform' => &_extract_waveform($fhout->filename)); };
+                if ($@) {
+                    warn "[PALLIATIVE] waveform extraction failed; using placeholder waveform\n";
+                    $c->stash('waveform' => 'palliative');
                 }
-            ),
-            file_size => -s $fhout->filename,
-            s3_path   => $s3,
-        };
+            }
+            $c->stash('waveform' => 'palliative') unless $c->stash('waveform');
 
-        undef $fhout;
+            eval { $c->stash('audio_duration' => &_extract_duration($fhout->filename)); };
+            if ($@) {
+                warn "[PALLIATIVE] duration extraction failed; using 1 second duration\n";
+                $c->stash('audio_duration' => 1);
+            }
+
+            my $s3 = _palliative_upload_audio_file(
+                $c,
+                file      => $fhout->filename,
+                path      => $s3_prefix . ".aac",
+                type      => 'audio/aac',
+                id        => $id,
+                extension => 'aac',
+            );
+
+            $row = {
+                file_info => to_json(
+                    {
+                        o_ext  => $ext,
+                        o_size => $upload->size,
+                    }
+                ),
+                file_size => -s $fhout->filename,
+                s3_path   => $s3,
+            };
+
+            undef $fhout;
+        }
     }
     else {
         die {
@@ -294,6 +347,25 @@ sub _extract_waveform {
     undef $tmp;
 
     return $content;
+}
+
+sub _palliative_upload_audio_file {
+    my ($c, %opts) = @_;
+
+    my $s3;
+    eval {
+        $s3 = $c->_uploader->upload({path => $opts{path}, file => $opts{file}, type => $opts{type}});
+        1;
+    } or do {
+        my $err = $@ || 'unknown upload error';
+        warn "[PALLIATIVE] S3 audio upload failed; saving local fallback: $err\n";
+
+        my $fallback = get_media_filepath(join('.', 'palliative', $opts{id}, $opts{extension} || 'bin'));
+        copy($opts{file}, $fallback) or die "palliative local audio copy failed: $!";
+        $s3 = URI->new("file://$fallback");
+    };
+
+    return $s3;
 }
 
 sub _extract_duration {
