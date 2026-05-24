@@ -21,6 +21,9 @@ sub register {
     # GET /get-proxy
     $r->get('get-proxy')->to(controller => 'MediaDownload', action => 'public_get_proxy');
 
+    # GET /audio_palliative/health
+    $r->get('audio_palliative/health')->to(controller => 'Me_Media', action => 'audio_palliative_health');
+
     # GET /pontos-de-apoio-dados-auxiliares
     $r->get('pontos-de-apoio-dados-auxiliares')->to(controller => 'PontoApoio', action => 'pa_aux_data');
 
