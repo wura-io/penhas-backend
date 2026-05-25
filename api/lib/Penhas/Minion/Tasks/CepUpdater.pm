@@ -42,7 +42,8 @@ sub cliente_update_cep {
         }
     }
 
-    die "cep $cep não encontrado" unless $result;
+    die "cep $cep não encontrado"
+      if !$result || (grep { length $result->{$_} } @_address_fields) != @_address_fields;
 
     $user->update(
         {

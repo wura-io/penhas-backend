@@ -80,9 +80,9 @@ sub post {
     if ($cep && !is_test()) {
         my $err;
         my $result;
+        my @_address_fields = qw(city state);
         eval {
             foreach my $backend (map { Penhas::CEP->new_with_traits(traits => $_) } qw(ViaCep)) {
-                my @_address_fields = qw(city state);
                 $result = $backend->find($cep);
                 if ($result) {
 
@@ -90,7 +90,7 @@ sub post {
                     last if (grep { length $result->{$_} } @_address_fields) == @_address_fields;
                 }
             }
-            if (!$result) {
+            if (!$result || (grep { length $result->{$_} } @_address_fields) != @_address_fields) {
                 $err = {
                     error   => 'cep_invalid',
                     message => "Não conseguimos localizar o endereço do CEP $cep!",
@@ -100,7 +100,7 @@ sub post {
             }
         };
         if ($@) {
-            $c->log->error("Error during cep test: $@");
+            $c->log->error("Technical failure during cep test for $cep: $@");
         }
         die $err if defined $err;
     }

@@ -14,9 +14,14 @@ sub _find {
     my $cep = pop;
     my $res = $ua->get('https://viacep.com.br/ws/' . $cep . '/json/');
 
-    return unless $res->is_success;
+    die sprintf 'ViaCep request failed for cep %s: HTTP %s', $cep, $res->code
+      unless $res->is_success;
 
-    my $r = eval { decode_json($res->content) } or return;
+    my $r = eval { decode_json($res->content) };
+    die sprintf 'ViaCep returned invalid JSON for cep %s: %s', $cep, $@
+      if $@ || !$r;
+
+    return if $r->{erro};
 
     my $street = $r->{logradouro} || '';
 
